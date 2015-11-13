@@ -14,23 +14,60 @@
 namespace core {
 
 template<typename T>
-class default_data_accessor {
+class data_accessor_base {
  public:
-  const T& operator()() const;
-  T& operator()();
+  static void build_offsets(const multiarray& dimensions) {
+    if (dimensions.size()) {
+      offsets.resize(dimensions.size());
+      offsets.back() = 1;
+
+      std::size_t partial_product(dimensions.back());
+      for (std::size_t dim(1); dim < dimensions.size(); ++dim) {
+        offsets[dimensions.size() - 1 - dim] = partial_product;
+        partial_product *= dimensions[dimensions.size() - 1 - dim];
+      }
+    }
+  }
   
- private:
-  //multiindex dimensions, offsets;
+  static std::size_t index_to_offset(const multiindex& m,
+                                     const multiindex& offsets) const {
+    std::size_t result(0);
+    const std::size_t ignore(m.size() - get_rank());
+    
+    for (std::size_t i(0); i < get_rank(); ++i)
+      result += m[ignore + i] * offsets[i];
+    
+    return result;
+  }
+  
+  static std::size_t get_length_from_dimensions(const multiindex& dims) const {
+    if (dims.size() == 0)
+      return 0;
+
+    return std::accumulate(dims.begin(), dims.end(),
+                           1, std::multiplies<std::size_t>());
+  }
 };
 
 template<typename T>
-class slice_data_accessor {
+class default_data_accessor: public data_accessor_base {
  public:
   const T& operator()() const;
   T& operator()();
   
  private:
-  //multiindex dimensions, offsets, index_base, strides, extends;
+  array<T> elements;
+  multiindex dimensions, offsets;
+};
+
+template<typename T>
+class slice_data_accessor: public data_accessor_base {
+ public:
+  const T& operator()() const;
+  T& operator()();
+  
+ private:
+  multiindex dimensions, offsets, index_base, strides, extends;
 };
 
 
@@ -384,40 +421,6 @@ class ndarray : public data_accessor {
   }
 
  private:
-  multiindex dimensions;
-  multiindex offsets;
-  array<T> elements;
-
-  void build_offsets() {
-    if (dimensions.size()) {
-      offsets.resize(dimensions.size());
-      offsets.back() = 1;
-
-      std::size_t partial_product(dimensions.back());
-      for (std::size_t dim(1); dim < dimensions.size(); ++dim) {
-        offsets[dimensions.size() - 1 - dim] = partial_product;
-        partial_product *= dimensions[dimensions.size() - 1 - dim];
-      }
-    }
-  }
-  
-  std::size_t index_to_offset(const multiindex& m) const {
-    std::size_t result(0);
-    const std::size_t ignore(m.size() - get_rank());
-    
-    for (std::size_t i(0); i < get_rank(); ++i)
-      result += m[ignore + i] * offsets[i];
-    
-    return result;
-  }
-  
-  std::size_t get_length_from_dimensions(const multiindex& dims) const {
-    if (dims.size() == 0)
-      return 0;
-
-    return std::accumulate(dims.begin(), dims.end(),
-                           1, std::multiplies<std::size_t>());
-  }
 
   /*
    *  Intern broadcasting operator helpers:
